@@ -1,6 +1,8 @@
 package object
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -233,33 +235,42 @@ func (t *Tree) Decode(o plumbing.EncodedObject) (err error) {
 	r := sync.GetBufioReader(reader)
 	defer sync.PutBufioReader(r)
 
+	var buf bytes.Buffer
+	buf.Grow(7 + 1024 + 20)
+	var hash plumbing.Hash
+
 	for {
-		str, err := r.ReadString(' ')
+		// 1. decode mode part
+		part, err := readPart(r, ' ', &buf)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 
 			return err
 		}
-		str = str[:len(str)-1] // strip last byte (' ')
 
-		mode, err := filemode.New(str)
+		mode, err := filemode.NewFromBytes(part)
 		if err != nil {
 			return err
 		}
 
-		name, err := r.ReadString(0)
+		buf.Reset()
+
+		// 2. decode name part
+		part, err = readPart(r, 0, &buf)
 		if err != nil && err != io.EOF {
 			return err
 		}
 
-		var hash plumbing.Hash
+		baseName := string(part)
+		buf.Reset()
+
+		// 3. decode hash part. Expect exactly 20 bytes.
 		if _, err = io.ReadFull(r, hash[:]); err != nil {
 			return err
 		}
 
-		baseName := name[:len(name)-1]
 		t.Entries = append(t.Entries, TreeEntry{
 			Hash: hash,
 			Mode: mode,
@@ -522,4 +533,44 @@ func simpleJoin(parent, child string) string {
 		return parent + "/" + child
 	}
 	return child
+}
+
+// readPart reads from a bufio.Reader until delim is found.
+// The delimiter is stripped from the result.
+//
+// It reuses a previously allocated bytes.Buffer and performs no extraneous internal copy.
+func readPart(b *bufio.Reader, delim byte, out *bytes.Buffer) ([]byte, error) {
+	err := collectFragments(b, delim, out)
+	if err != nil {
+		return nil, err
+	}
+
+	return out.Bytes()[:out.Len()-1], nil
+}
+
+// collectFragments (inspired by bufio.Reader.ReadBytes) reads bytes from a bufio.Reader
+// until a delimiter is found. The difference with bufio.Reader.ReadString or bufio.Reader.ReadByte
+// is that we may pass the same bytes.Buffer to store the result.
+func collectFragments(b *bufio.Reader, delim byte, out *bytes.Buffer) error {
+	var (
+		frag []byte
+		e    error
+	)
+
+	for {
+		frag, e = b.ReadSlice(delim)
+		if e == nil { // got final fragment
+			if len(frag) > 0 {
+				_, _ = out.Write(frag)
+			}
+
+			return nil
+		}
+
+		if !errors.Is(e, bufio.ErrBufferFull) { // unexpected error
+			return e
+		}
+
+		_, _ = out.Write(frag)
+	}
 }

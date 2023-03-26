@@ -64,6 +64,24 @@ func New(s string) (FileMode, error) {
 	return FileMode(n), nil
 }
 
+// NewFromBytes is like New, with an input octal string as a slice of bytes.
+func NewFromBytes(s []byte) (FileMode, error) {
+	var n uint32
+	for _, b := range s {
+		if b < '0' || b > '7' {
+			return Empty, &strconv.NumError{
+				Func: "ParseUint",
+				Num:  string(s),
+				Err:  strconv.ErrSyntax,
+			}
+		}
+
+		n = n*8 + uint32(b-48)
+	}
+
+	return FileMode(n), nil
+}
+
 // NewFromOSFileMode returns the FileMode used by git to represent
 // the provided file system modes and a nil error on success.  If the
 // file system mode cannot be mapped to any valid git mode (as with

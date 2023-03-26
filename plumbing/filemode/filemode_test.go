@@ -38,7 +38,12 @@ func (s *ModeSuite) TestNew(c *C) {
 		{input: "00000000000100644", expected: Regular},
 	} {
 		comment := Commentf("input = %q", test.input)
+
 		obtained, err := New(test.input)
+		c.Assert(obtained, Equals, test.expected, comment)
+		c.Assert(err, IsNil, comment)
+
+		obtained, err = NewFromBytes([]byte(test.input))
 		c.Assert(obtained, Equals, test.expected, comment)
 		c.Assert(err, IsNil, comment)
 	}
