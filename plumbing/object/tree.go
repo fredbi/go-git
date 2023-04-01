@@ -44,12 +44,25 @@ type Tree struct {
 
 // GetTree gets a tree from an object storer and decodes it.
 func GetTree(s storer.EncodedObjectStorer, h plumbing.Hash) (*Tree, error) {
+	onceInitTreeCache() // TODO(fred): make tree cache an option
+
+	if t := cachedTrees.Get(h); t != nil {
+		return t, nil
+	}
+
 	o, err := s.EncodedObject(plumbing.TreeObject, h)
 	if err != nil {
 		return nil, err
 	}
 
-	return DecodeTree(s, o)
+	t, err := DecodeTree(s, o)
+	if err != nil {
+		return nil, err
+	}
+
+	cachedTrees.Put(h, t)
+
+	return t, nil
 }
 
 // DecodeTree decodes an encoded object into a *Tree and associates it to the
@@ -127,24 +140,23 @@ func (t *Tree) TreeEntryFile(e *TreeEntry) (*File, error) {
 }
 
 // FindEntry search a TreeEntry in this tree or any subtree.
-func (t *Tree) FindEntry(path string) (*TreeEntry, error) {
+func (t *Tree) FindEntry(pth string) (*TreeEntry, error) {
+	pathParts := bytes.FieldsFunc(hackZeroAlloc(pth), func(r rune) bool { return r == '/' })
 	if t.t == nil {
-		t.t = make(map[string]*Tree)
+		t.t = make(map[string]*Tree, len(pathParts))
 	}
-
-	pathParts := strings.Split(path, "/")
 	startingTree := t
-	pathCurrent := ""
+	var pathCurrent []byte
 
 	// search for the longest path in the tree path cache
 	for i := len(pathParts) - 1; i > 1; i-- {
-		path := filepath.Join(pathParts[:i]...)
+		subpath := bytes.Join(pathParts[:i], []byte{filepath.Separator})
 
-		tree, ok := t.t[path]
+		tree, ok := t.t[string(subpath)]
 		if ok {
 			startingTree = tree
 			pathParts = pathParts[i:]
-			pathCurrent = path
+			pathCurrent = subpath
 
 			break
 		}
@@ -157,14 +169,14 @@ func (t *Tree) FindEntry(path string) (*TreeEntry, error) {
 			return nil, err
 		}
 
-		pathCurrent = filepath.Join(pathCurrent, pathParts[0])
-		t.t[pathCurrent] = tree
+		pathCurrent = bytes.Join([][]byte{pathCurrent, pathParts[0]}, []byte{filepath.Separator})
+		t.t[string(pathCurrent)] = tree
 	}
 
 	return tree.entry(pathParts[0])
 }
 
-func (t *Tree) dir(baseName string) (*Tree, error) {
+func (t *Tree) dir(baseName []byte) (*Tree, error) {
 	entry, err := t.entry(baseName)
 	if err != nil {
 		return nil, ErrDirectoryNotFound
@@ -181,12 +193,12 @@ func (t *Tree) dir(baseName string) (*Tree, error) {
 	return tree, err
 }
 
-func (t *Tree) entry(baseName string) (*TreeEntry, error) {
+func (t *Tree) entry(baseName []byte) (*TreeEntry, error) {
 	if t.m == nil {
 		t.buildMap()
 	}
 
-	entry, ok := t.m[baseName]
+	entry, ok := t.m[string(baseName)]
 	if !ok {
 		return nil, ErrEntryNotFound
 	}
@@ -380,6 +392,14 @@ type TreeWalker struct {
 // It is the caller's responsibility to call Close() when finished with the
 // tree walker.
 func NewTreeWalker(t *Tree, recursive bool, seen map[plumbing.Hash]bool) *TreeWalker {
+	return newTreeWalker(t, recursive, seen, false)
+}
+
+func newTreeWalker(t *Tree, recursive bool, seen map[plumbing.Hash]bool, fromPool bool) *TreeWalker {
+	if fromPool {
+		return getTreeWalker(t, recursive, seen)
+	}
+
 	stack := make([]*treeEntryIter, 0, startingStackSize)
 	stack = append(stack, &treeEntryIter{t, 0})
 
@@ -475,7 +495,11 @@ func (w *TreeWalker) Tree() *Tree {
 
 // Close releases any resources used by the TreeWalker.
 func (w *TreeWalker) Close() {
-	w.stack = nil
+	w.reset()
+}
+
+func (w *TreeWalker) reset() {
+	w.stack = w.stack[:0]
 }
 
 // TreeIter provides an iterator for a set of trees.

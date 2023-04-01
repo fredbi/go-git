@@ -154,7 +154,7 @@ func (fe fakeEncodedObject) Reader() (io.ReadCloser, error) {
 }
 
 func (s *TreeSuite) TestDir(c *C) {
-	vendor, err := s.Tree.dir("vendor")
+	vendor, err := s.Tree.dir([]byte("vendor"))
 	c.Assert(err, IsNil)
 
 	t, err := GetTree(s.Tree.s, s.Tree.ID())
@@ -163,7 +163,7 @@ func (s *TreeSuite) TestDir(c *C) {
 	c.Assert(err, IsNil)
 
 	t.s = fakeStorer{t.s, vendor.ID(), fakeEncodedObject{o}}
-	_, err = t.dir("vendor")
+	_, err = t.dir([]byte("vendor"))
 	c.Assert(err, NotNil)
 }
 

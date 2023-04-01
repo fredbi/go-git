@@ -1,7 +1,6 @@
 package object
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/go-git/go-git/v5/utils/merkletrie"
@@ -42,6 +41,7 @@ type DiffTreeOptions struct {
 	// OnlyExactRenames performs only detection of exact renames and will not perform
 	// any detection of renames based on file similarity.
 	OnlyExactRenames bool
+	// TODO: UseCache
 }
 
 // DefaultDiffTreeOptions are the default and recommended options for the
@@ -70,15 +70,23 @@ func DiffTreeWithOptions(
 	to := NewTreeRootNode(b)
 
 	hashEqual := func(a, b noder.Hasher) bool {
-		return bytes.Equal(a.Hash(), b.Hash())
+		return a.Hash() == b.Hash()
 	}
 
-	merkletrieChanges, err := merkletrie.DiffTreeContext(ctx, from, to, hashEqual)
-	if err != nil {
-		if err == merkletrie.ErrCanceled {
-			return nil, ErrCanceled
+	onceInitMerkleCache() // TODO: maintaining a Merkel cache is an option
+
+	merkletrieChanges := cachedMerkles.Get(from, to)
+	if merkletrieChanges == nil {
+		var err error
+
+		merkletrieChanges, err = merkletrie.DiffTreeContext(ctx, from, to, hashEqual)
+		if err != nil {
+			if err == merkletrie.ErrCanceled {
+				return nil, ErrCanceled
+			}
+			return nil, err
 		}
-		return nil, err
+		cachedMerkles.Put(from, to, merkletrieChanges)
 	}
 
 	changes, err := newChanges(merkletrieChanges)

@@ -274,8 +274,7 @@ func DiffTree(
 // uses the provided hashEqual callback to compare noders.
 // Error will be returned if context expires
 // Provided context must be non nil
-func DiffTreeContext(ctx context.Context, fromTree, toTree noder.Noder,
-	hashEqual noder.Equal) (Changes, error) {
+func DiffTreeContext(ctx context.Context, fromTree, toTree noder.Noder, hashEqual noder.Equal) (Changes, error) {
 	ret := NewChanges()
 
 	ii, err := newDoubleIter(fromTree, toTree, hashEqual)
@@ -391,7 +390,12 @@ func diffNodesSameName(changes *Changes, ii *doubleIter) error {
 			return err
 		}
 	case status.bothAreFiles:
-		changes.Add(NewModify(from, to))
+		cloneFrom := make(noder.Path, len(from))
+		cloneTo := make(noder.Path, len(to))
+		copy(cloneFrom, from)
+		copy(cloneTo, to)
+		changes.Add(NewModify(cloneFrom, cloneTo))
+
 		if err = ii.nextBoth(); err != nil {
 			return err
 		}

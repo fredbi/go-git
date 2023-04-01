@@ -1,7 +1,6 @@
 package frame
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -45,7 +44,7 @@ func New(n noder.Noder) (*Frame, error) {
 //     []
 //     ["a", "b"]
 func (f *Frame) String() string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	_ = buf.WriteByte('[')
 
 	sep := ""

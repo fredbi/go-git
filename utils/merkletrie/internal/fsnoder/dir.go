@@ -1,11 +1,11 @@
 package fsnoder
 
 import (
-	"bytes"
 	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-git/go-git/v5/utils/merkletrie/noder"
 )
@@ -14,7 +14,7 @@ import (
 type dir struct {
 	name     string        // relative
 	children []noder.Noder // sorted by name
-	hash     []byte        // memoized
+	hash     [24]byte      // memoized
 }
 
 type byName []noder.Noder
@@ -32,6 +32,7 @@ func newDir(name string, children []noder.Noder) (*dir, error) {
 	_ = copy(cloned, children)
 	sort.Sort(byName(cloned))
 
+	// TODO(fred): merge checks in one single loop
 	if hasChildrenWithNoName(cloned) {
 		return nil, fmt.Errorf("non-root inner nodes cannot have empty names")
 	}
@@ -40,10 +41,13 @@ func newDir(name string, children []noder.Noder) (*dir, error) {
 		return nil, fmt.Errorf("children cannot have duplicated names")
 	}
 
-	return &dir{
+	d := &dir{
 		name:     name,
 		children: cloned,
-	}, nil
+	}
+	d.calculateHash()
+
+	return d, nil
 }
 
 func hasChildrenWithNoName(children []noder.Noder) bool {
@@ -70,26 +74,29 @@ func hasDuplicatedNames(children []noder.Noder) bool {
 	return false
 }
 
-func (d *dir) Hash() []byte {
-	if d.hash == nil {
-		d.calculateHash()
-	}
-
+func (d *dir) Hash() [24]byte {
 	return d.hash
 }
+
+var (
+	hashPrefix = []byte("dir ")
+	hashSep    = []byte(" ")
+)
 
 // hash is calculated as the hash of "dir " plus the concatenation, for
 // each child, of its name, a space and its hash.  Children are sorted
 // alphabetically before calculating the hash, so the result is unique.
 func (d *dir) calculateHash() {
 	h := fnv.New64a()
-	h.Write([]byte("dir "))
+	h.Write(hashPrefix)
+
 	for _, c := range d.children {
-		h.Write([]byte(c.Name()))
-		h.Write([]byte(" "))
-		h.Write(c.Hash())
+		h.Write(hackZeroAlloc(c.Name()))
+		h.Write(hashSep)
+		hash := c.Hash()
+		h.Write(hash[:])
 	}
-	d.hash = h.Sum([]byte{})
+	copy(d.hash[:], h.Sum([]byte{}))
 }
 
 func (d *dir) Name() string {
@@ -102,6 +109,8 @@ func (d *dir) IsDir() bool {
 
 // returns a copy so nobody can alter the order of its elements from the
 // outside.
+//
+// NOTE: we clone here because some callers may want to reorder children.
 func (d *dir) Children() ([]noder.Noder, error) {
 	clon := make([]noder.Noder, len(d.children))
 	_ = copy(clon, d.children)
@@ -126,7 +135,8 @@ const (
 // children of each node are sorted alphabetically by name when
 // generating the string.
 func (d *dir) String() string {
-	var buf bytes.Buffer
+	var buf strings.Builder
+	buf.Grow(len(d.name) + utf8.RuneLen(dirStartMark) + utf8.RuneLen(dirEndMark) + len(d.children)*utf8.RuneLen(dirElementSep))
 
 	buf.WriteString(d.name)
 	buf.WriteRune(dirStartMark)

@@ -122,7 +122,11 @@ type noderToChangeFn func(noder.Path) Change // NewInsert or NewDelete
 
 func (l *Changes) addRecursive(root noder.Path, ctor noderToChangeFn) error {
 	if !root.IsDir() {
-		l.Add(ctor(root))
+		clone := make(noder.Path, len(root))
+		copy(clone, root)
+
+		l.Add(ctor(clone))
+
 		return nil
 	}
 
@@ -142,7 +146,11 @@ func (l *Changes) addRecursive(root noder.Path, ctor noderToChangeFn) error {
 		if current.IsDir() {
 			continue
 		}
-		l.Add(ctor(current))
+
+		clone := make(noder.Path, len(current))
+		copy(clone, current)
+
+		l.Add(ctor(clone))
 	}
 
 	return nil

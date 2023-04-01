@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"unicode"
 
 	"github.com/go-git/go-git/v5/utils/merkletrie/noder"
 )
@@ -12,7 +13,7 @@ import (
 // a filesystem tree.  See examples of the string format in the package
 // description.
 func New(s string) (noder.Noder, error) {
-	return decodeDir([]byte(s), root)
+	return decodeDir(hackZeroAlloc(s), root)
 }
 
 const (
@@ -59,14 +60,6 @@ func decodeDir(data []byte, isRoot bool) (*dir, error) {
 	}
 
 	return newDir(name, children)
-}
-
-func isNumber(b rune) bool {
-	return '0' <= b && b <= '9'
-}
-
-func isLetter(b rune) bool {
-	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
 func decodeChildren(data []byte) ([]noder.Noder, error) {
@@ -155,45 +148,35 @@ func decodeFile(data []byte) (noder.Noder, error) {
 		return nil, fmt.Errorf("malformed file, found %c before %c",
 			fileEndMark, fileStartMark)
 	case contentStart == contentEnd:
-		name := string(data[:nameEnd])
+		name := data[:nameEnd]
 		if !validFileName(name) {
 			return nil, fmt.Errorf("invalid file name")
 		}
-		return newFile(name, "")
+		return newFileBytes(name, []byte{})
 	default:
-		name := string(data[:nameEnd])
+		name := data[:nameEnd]
 		if !validFileName(name) {
 			return nil, fmt.Errorf("invalid file name")
 		}
-		contents := string(data[contentStart:contentEnd])
+		contents := data[contentStart:contentEnd]
 		if !validFileContents(contents) {
 			return nil, fmt.Errorf("invalid file contents")
 		}
-		return newFile(name, contents)
+		return newFileBytes(name, contents)
 	}
 }
 
-func validFileName(s string) bool {
-	for _, c := range s {
-		if !isLetter(c) && c != '.' {
-			return false
-		}
-	}
-
-	return true
+// validFileName accepts names composed of letters and dots.
+func validFileName(s []byte) bool {
+	return bytes.LastIndexFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && r != '.' }) == -1
 }
 
-func validFileContents(s string) bool {
-	for _, c := range s {
-		if !isNumber(c) {
-			return false
-		}
-	}
-
-	return true
+// validFileContents expects content runes to be numbers
+func validFileContents(s []byte) bool {
+	return bytes.LastIndexFunc(s, func(r rune) bool { return !unicode.IsDigit(r) }) == -1
 }
 
 // HashEqual returns if a and b have the same hash.
 func HashEqual(a, b noder.Hasher) bool {
-	return bytes.Equal(a.Hash(), b.Hash())
+	return a.Hash() == b.Hash()
 }

@@ -1,7 +1,6 @@
 package index
 
 import (
-	"bytes"
 	"path/filepath"
 	"testing"
 
@@ -106,9 +105,9 @@ func (s *NoderSuite) TestDiffSameRoot(c *C) {
 var empty = make([]byte, 24)
 
 func isEquals(a, b noder.Hasher) bool {
-	if bytes.Equal(a.Hash(), empty) || bytes.Equal(b.Hash(), empty) {
+	if a.Hash() == zeroHash || b.Hash() == zeroHash {
 		return false
 	}
 
-	return bytes.Equal(a.Hash(), b.Hash())
+	return a.Hash() == b.Hash()
 }

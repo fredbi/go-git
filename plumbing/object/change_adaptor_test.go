@@ -41,7 +41,8 @@ func newNoder(t *Tree, e TreeEntry) noder.Noder {
 		parent: t,
 		name:   e.Name,
 		mode:   e.Mode,
-		hash:   e.Hash,
+		nhash:  e.Hash,
+		hash:   makeNoderHash(e.Hash, e.Mode),
 	}
 }
 
@@ -53,18 +54,19 @@ func (s *ChangeAdaptorSuite) TestTreeNoderHashHasMode(c *C) {
 	mode := filemode.Regular
 
 	treeNoder := &treeNoder{
-		hash: hash,
-		mode: mode,
+		nhash: hash,
+		hash:  makeNoderHash(hash, mode),
+		mode:  mode,
 	}
 
-	expected := []byte{
+	expected := [24]byte{
 		0xaa, 0xaa, 0x00, 0x00, // original hash is aaaa and 16 zeros
 		0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00,
 	}
-	expected = append(expected, filemode.Regular.Bytes()...)
+	copy(expected[20:], filemode.Regular.Bytes())
 
 	c.Assert(treeNoder.Hash(), DeepEquals, expected)
 }

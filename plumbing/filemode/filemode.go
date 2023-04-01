@@ -134,8 +134,15 @@ func isSetSymLink(m os.FileMode) bool {
 // Bytes return a slice of 4 bytes with the mode in little endian
 // encoding.
 func (m FileMode) Bytes() []byte {
-	ret := make([]byte, 4)
-	binary.LittleEndian.PutUint32(ret, uint32(m))
+	a := m.BytesArray()
+
+	return a[:]
+}
+
+func (m FileMode) BytesArray() [4]byte {
+	var ret [4]byte
+	binary.LittleEndian.PutUint32(ret[:], uint32(m))
+
 	return ret
 }
 

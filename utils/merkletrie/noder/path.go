@@ -1,7 +1,6 @@
 package noder
 
 import (
-	"bytes"
 	"strings"
 )
 
@@ -26,7 +25,7 @@ func (p Path) Skip() bool {
 // String returns the full path of the final noder as a string, using
 // "/" as the separator.
 func (p Path) String() string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	sep := ""
 	for _, e := range p {
 		_, _ = buf.WriteString(sep)
@@ -43,7 +42,7 @@ func (p Path) Last() Noder {
 }
 
 // Hash returns the hash of the final noder of the path.
-func (p Path) Hash() []byte {
+func (p Path) Hash() [24]byte {
 	return p.Last().Hash()
 }
 

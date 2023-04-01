@@ -62,6 +62,8 @@ type Iter struct {
 	// the iterator into absolute paths used by external applications.
 	// For relative iterator this will be nil.
 	base noder.Path
+
+	cur noder.Path
 }
 
 // NewIter returns a new relative iterator using the provider noder as
@@ -92,6 +94,7 @@ func newIter(root noder.Noder, base noder.Path) (*Iter, error) {
 		return nil, err
 	}
 	ret.push(frame)
+	ret.cur = make(noder.Path, 0, len(ret.base)+len(ret.frameStack))
 
 	return ret, nil
 }
@@ -174,6 +177,8 @@ func (iter *Iter) advance(wantDescend bool) (noder.Path, error) {
 // Returns the path to the current node, adding the base if there was
 // one, and a nil error.  If there were no noders left, it returns nil
 // and io.EOF.  If an error occurred, it returns nil and the error.
+//
+// NOTE: the noder.Path result reuses the same slice. Results need to be copied.
 func (iter *Iter) current() (noder.Path, error) {
 	if topFrame, ok := iter.top(); !ok {
 		return nil, io.EOF
@@ -181,20 +186,27 @@ func (iter *Iter) current() (noder.Path, error) {
 		return nil, io.EOF
 	}
 
-	ret := make(noder.Path, 0, len(iter.base)+len(iter.frameStack))
+	// ret := getNoderPath(len(iter.base) + len(iter.frameStack))
+	// NOTE(fred): #1 alloc (28%)
+	// Tried the pool approach, but it is hard to know when to relinquish those
+	// ret := make(noder.Path, 0, len(iter.base)+len(iter.frameStack))
+
+	// reuse the same slice capacity for current
 
 	// concat the base...
-	ret = append(ret, iter.base...)
+	iter.cur = iter.cur[:0] // REUSE
+	// iter.cur = make(noder.Path, 0, len(iter.base)+len(iter.frameStack)) // DON'T REUSE
+	iter.cur = append(iter.cur, iter.base...)
 	// ... and the current node and all its ancestors
 	for i, f := range iter.frameStack {
 		t, ok := f.First()
 		if !ok {
 			panic(fmt.Sprintf("frame %d is empty", i))
 		}
-		ret = append(ret, t)
+		iter.cur = append(iter.cur, t)
 	}
 
-	return ret, nil
+	return iter.cur, nil
 }
 
 // removes the current node if any, and all the frames that become empty as a

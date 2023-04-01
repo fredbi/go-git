@@ -20,8 +20,10 @@ type treeNoder struct {
 	parent   *Tree  // the root node is its own parent
 	name     string // empty string for the root node
 	mode     filemode.FileMode
-	hash     plumbing.Hash
+	nhash    plumbing.Hash // git hash of the current node
+	hash     [24]byte      // noder hash, appended with mode
 	children []noder.Noder // memoized
+	walker   *TreeWalker
 }
 
 // NewTreeRootNode returns the root node of a Tree
@@ -29,13 +31,38 @@ func NewTreeRootNode(t *Tree) noder.Noder {
 	if t == nil {
 		return &treeNoder{}
 	}
+	onceInitTreeNoderCache()
 
-	return &treeNoder{
+	if n := cachedTreeNoders.Get(t.Hash, filemode.Dir); n != nil {
+		return n
+	}
+
+	n := &treeNoder{
 		parent: t,
 		name:   "",
 		mode:   filemode.Dir,
-		hash:   t.Hash,
+		nhash:  t.Hash,
+		hash:   makeNoderHash(t.Hash, filemode.Dir),
 	}
+
+	cachedTreeNoders.Put(t.Hash, filemode.Dir, n)
+
+	return n
+}
+
+func makeNoderHash(hash plumbing.Hash, mode filemode.FileMode) [24]byte {
+	var h [24]byte
+	copy(h[:], hash[:])
+
+	if mode == filemode.Deprecated {
+		copy(h[20:], filemode.Regular.Bytes())
+
+		return h
+	}
+
+	copy(h[20:], mode.Bytes())
+
+	return h
 }
 
 func (t *treeNoder) Skip() bool {
@@ -50,11 +77,8 @@ func (t *treeNoder) String() string {
 	return "treeNoder <" + t.name + ">"
 }
 
-func (t *treeNoder) Hash() []byte {
-	if t.mode == filemode.Deprecated {
-		return append(t.hash[:], filemode.Regular.Bytes()...)
-	}
-	return append(t.hash[:], t.mode.Bytes()...)
+func (t *treeNoder) Hash() [24]byte {
+	return t.hash
 }
 
 func (t *treeNoder) Name() string {
@@ -88,41 +112,56 @@ func (t *treeNoder) Children() ([]noder.Noder, error) {
 		}
 	}
 
-	return transformChildren(parent)
+	return t.transformChildren(parent)
 }
 
 // Returns the children of a tree as treenoders.
 // Efficiency is key here.
-func transformChildren(t *Tree) ([]noder.Noder, error) {
+func (t *treeNoder) transformChildren(tree *Tree) ([]noder.Noder, error) {
 	var err error
 	var e TreeEntry
+	onceInitTreeNoderCache()
 
 	// there will be more tree entries than children in the tree,
 	// due to submodules and empty directories, but I think it is still
 	// worth it to pre-allocate the whole array now, even if sometimes
 	// is bigger than needed.
-	ret := make([]noder.Noder, 0, len(t.Entries))
+	// ret := make([]noder.Noder, 0, len(tree.Entries)) // CHALLENGE TODO(fred)
+	var ret []noder.Noder // it is actually better to leave the go runtime allocate as needed
 
-	walker := NewTreeWalker(t, false, nil) // don't recurse
+	if t.walker == nil {
+		t.walker = newTreeWalker(tree, false, nil, false) // don't recurse
+	} else {
+		t.walker.reset()
+	}
 	// don't defer walker.Close() for efficiency reasons.
 	for {
-		_, e, err = walker.Next()
+		_, e, err = t.walker.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			walker.Close()
+			// walker.Close()
+			// putTreeWalker(walker)
+
 			return nil, err
 		}
 
-		ret = append(ret, &treeNoder{
-			parent: t,
-			name:   e.Name,
-			mode:   e.Mode,
-			hash:   e.Hash,
-		})
+		n := cachedTreeNoders.Get(e.Hash, e.Mode)
+		if n == nil {
+			n = &treeNoder{
+				parent: tree,
+				name:   e.Name,
+				mode:   e.Mode,
+				nhash:  e.Hash,
+				hash:   makeNoderHash(e.Hash, e.Mode),
+			}
+			cachedTreeNoders.Put(e.Hash, e.Mode, n)
+		}
+
+		ret = append(ret, n)
 	}
-	walker.Close()
+	// putTreeWalker(walker)
 
 	return ret, nil
 }

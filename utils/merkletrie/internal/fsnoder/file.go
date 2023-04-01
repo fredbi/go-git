@@ -1,9 +1,10 @@
 package fsnoder
 
 import (
-	"bytes"
 	"fmt"
 	"hash/fnv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/go-git/go-git/v5/utils/merkletrie/noder"
 )
@@ -11,31 +12,34 @@ import (
 // file values represent file-like noders in a merkle trie.
 type file struct {
 	name     string // relative
-	contents string
-	hash     []byte // memoized
+	contents []byte
+	hash     [24]byte // memoized
 }
 
 // newFile returns a noder representing a file with the given contents.
 func newFile(name, contents string) (*file, error) {
-	if name == "" {
+	return newFileBytes([]byte(name), []byte(contents))
+}
+
+func newFileBytes(name, contents []byte) (*file, error) {
+	if len(name) == 0 {
 		return nil, fmt.Errorf("files cannot have empty names")
 	}
+	h := fnv.New64a()
+	h.Write(contents) // it nevers returns an error.
+	var hash [24]byte
+	copy(hash[:], h.Sum(nil))
 
 	return &file{
-		name:     name,
+		name:     string(name),
 		contents: contents,
+		hash:     hash,
 	}, nil
 }
 
 // The hash of a file is just its contents.
 // Empty files will have the fnv64 basis offset as its hash.
-func (f *file) Hash() []byte {
-	if f.hash == nil {
-		h := fnv.New64a()
-		h.Write([]byte(f.contents)) // it nevers returns an error.
-		f.hash = h.Sum(nil)
-	}
-
+func (f *file) Hash() [24]byte {
 	return f.hash
 }
 
@@ -66,10 +70,11 @@ const (
 
 // String returns a string formatted as: name<contents>.
 func (f *file) String() string {
-	var buf bytes.Buffer
+	var buf strings.Builder
+	buf.Grow(len(f.name) + utf8.RuneLen(fileStartMark) + len(f.contents) + utf8.RuneLen(fileEndMark))
 	buf.WriteString(f.name)
 	buf.WriteRune(fileStartMark)
-	buf.WriteString(f.contents)
+	buf.Write(f.contents)
 	buf.WriteRune(fileEndMark)
 
 	return buf.String()

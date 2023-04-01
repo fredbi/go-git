@@ -17,6 +17,11 @@ var (
 			return bytes.NewBuffer(nil)
 		},
 	}
+	bytesHash = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 20+4) // regular hash has size 20 - treenoder hash has size 24
+		},
+	}
 )
 
 // GetByteSlice returns a *[]byte that is managed by a sync.Pool.
@@ -48,4 +53,13 @@ func GetBytesBuffer() *bytes.Buffer {
 // PutBytesBuffer puts buf back into its sync.Pool.
 func PutBytesBuffer(buf *bytes.Buffer) {
 	bytesBuffer.Put(buf)
+}
+
+func GetBytesHash() *[]byte {
+	buf := bytesHash.Get().(*[]byte)
+	return buf
+}
+
+func PutBytesHash(buf *[]byte) {
+	bytesHash.Put(buf)
 }

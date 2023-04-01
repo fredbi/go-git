@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"unsafe"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
@@ -12,8 +13,14 @@ import (
 	"github.com/go-git/go-billy/v5"
 )
 
-var ignore = map[string]bool{
-	".git": true,
+var zeroHash = [24]byte{}
+
+func ignore(key string) bool {
+	if key == ".git" {
+		return true
+	}
+
+	return false
 }
 
 // The node represents a file or a directory in a billy.Filesystem. It
@@ -25,10 +32,11 @@ type node struct {
 	fs         billy.Filesystem
 	submodules map[string]plumbing.Hash
 
-	path     string
-	hash     []byte
-	children []noder.Noder
-	isDir    bool
+	path       string
+	hash       [24]byte
+	children   []noder.Noder
+	isDir      bool
+	childrenOK bool
 }
 
 // NewRootNode returns the root node based on a given billy.Filesystem.
@@ -40,7 +48,11 @@ func NewRootNode(
 	fs billy.Filesystem,
 	submodules map[string]plumbing.Hash,
 ) noder.Noder {
-	return &node{fs: fs, submodules: submodules, isDir: true}
+	return &node{
+		fs:         fs,
+		submodules: submodules,
+		isDir:      true,
+	}
 }
 
 // Hash the hash of a filesystem is the result of concatenating the computed
@@ -49,7 +61,7 @@ func NewRootNode(
 // their mode.
 //
 // The hash of a directory is always a 24-bytes slice of zero values
-func (n *node) Hash() []byte {
+func (n *node) Hash() [24]byte {
 	return n.hash
 }
 
@@ -74,8 +86,10 @@ func (n *node) Children() ([]noder.Noder, error) {
 }
 
 func (n *node) NumChildren() (int, error) {
-	if err := n.calculateChildren(); err != nil {
-		return -1, err
+	if !n.childrenOK {
+		if err := n.calculateChildren(); err != nil {
+			return -1, err
+		}
 	}
 
 	return len(n.children), nil
@@ -98,8 +112,9 @@ func (n *node) calculateChildren() error {
 		return err
 	}
 
+	n.children = make([]noder.Noder, 0, len(files))
 	for _, file := range files {
-		if _, ok := ignore[file.Name()]; ok {
+		if ignore(file.Name()) {
 			continue
 		}
 
@@ -110,6 +125,8 @@ func (n *node) calculateChildren() error {
 
 		n.children = append(n.children, c)
 	}
+
+	n.childrenOK = true
 
 	return nil
 }
@@ -132,16 +149,19 @@ func (n *node) newChildNode(file os.FileInfo) (*node, error) {
 	}
 
 	if hash, isSubmodule := n.submodules[path]; isSubmodule {
-		node.hash = append(hash[:], filemode.Submodule.Bytes()...)
+		var h [24]byte
+		copy(h[:], hash[:])
+		copy(h[20:], filemode.Submodule.Bytes())
+		node.hash = h
 		node.isDir = false
 	}
 
 	return node, nil
 }
 
-func (n *node) calculateHash(path string, file os.FileInfo) ([]byte, error) {
+func (n *node) calculateHash(path string, file os.FileInfo) ([24]byte, error) {
 	if file.IsDir() {
-		return make([]byte, 24), nil
+		return zeroHash, nil
 	}
 
 	var hash plumbing.Hash
@@ -153,15 +173,19 @@ func (n *node) calculateHash(path string, file os.FileInfo) ([]byte, error) {
 	}
 
 	if err != nil {
-		return nil, err
+		return zeroHash, err
 	}
 
 	mode, err := filemode.NewFromOSFileMode(file.Mode())
 	if err != nil {
-		return nil, err
+		return zeroHash, err
 	}
 
-	return append(hash[:], mode.Bytes()...), nil
+	var h [24]byte
+	copy(h[:], hash[:])
+	copy(h[20:], mode.Bytes())
+
+	return h, nil
 }
 
 func (n *node) doCalculateHashForRegular(path string, file os.FileInfo) (plumbing.Hash, error) {
@@ -173,6 +197,8 @@ func (n *node) doCalculateHashForRegular(path string, file os.FileInfo) (plumbin
 	defer f.Close()
 
 	h := plumbing.NewHasher(plumbing.BlobObject, file.Size())
+	//var buf [4096]byte
+	//if _, err := io.CopyBuffer(h, f, buf[:]); err != nil {
 	if _, err := io.Copy(h, f); err != nil {
 		return plumbing.ZeroHash, err
 	}
@@ -187,7 +213,7 @@ func (n *node) doCalculateHashForSymlink(path string, file os.FileInfo) (plumbin
 	}
 
 	h := plumbing.NewHasher(plumbing.BlobObject, file.Size())
-	if _, err := h.Write([]byte(target)); err != nil {
+	if _, err := h.Write(hackZeroAlloc(target)); err != nil {
 		return plumbing.ZeroHash, err
 	}
 
@@ -196,4 +222,21 @@ func (n *node) doCalculateHashForSymlink(path string, file os.FileInfo) (plumbin
 
 func (n *node) String() string {
 	return n.path
+}
+
+// internalString representation of a string by the golang runtime
+type internalString struct {
+	Data unsafe.Pointer
+	Len  int
+}
+
+// hackZeroAlloc reuses a common hack found in the standard library
+// to avoid allocating the underlying bytes of a string when converting.
+//
+// This assumes that the caller does not use the returned []byte slices after
+// having relinquished the input string to the garbage collector.
+func hackZeroAlloc(s string) []byte {
+	addr := (*internalString)(unsafe.Pointer(&s)).Data
+
+	return unsafe.Slice((*byte)(addr), len(s))
 }

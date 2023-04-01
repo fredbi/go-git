@@ -351,25 +351,32 @@ func (s *DiffTreeSuite) TestDiffTree(c *C) {
 func (s *DiffTreeSuite) TestIssue279(c *C) {
 	// treeNoders should have the same hash when their mode is
 	// filemode.Deprecated and filemode.Regular.
+	h := plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	a := &treeNoder{
-		hash: plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-		mode: filemode.Regular,
+		nhash: h,
+		hash:  makeNoderHash(h, filemode.Regular),
+		mode:  filemode.Regular,
 	}
+
 	b := &treeNoder{
-		hash: plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-		mode: filemode.Deprecated,
+		nhash: h,
+		hash:  makeNoderHash(h, filemode.Deprecated),
+		mode:  filemode.Deprecated,
 	}
 	c.Assert(a.Hash(), DeepEquals, b.Hash())
 
 	// yet, they should have different hashes if their contents change.
+	h2 := plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 	aa := &treeNoder{
-		hash: plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-		mode: filemode.Regular,
+		nhash: h2,
+		hash:  makeNoderHash(h2, filemode.Regular),
+		mode:  filemode.Regular,
 	}
 	c.Assert(a.Hash(), Not(DeepEquals), aa.Hash())
 	bb := &treeNoder{
-		hash: plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-		mode: filemode.Deprecated,
+		nhash: h2,
+		hash:  makeNoderHash(h2, filemode.Deprecated),
+		mode:  filemode.Deprecated,
 	}
 	c.Assert(b.Hash(), Not(DeepEquals), bb.Hash())
 }

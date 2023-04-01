@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path"
@@ -212,12 +211,10 @@ func WriteFile(fs billy.Filesystem, filename string, data []byte, perm os.FileMo
 	return err
 }
 
-var empty = make([]byte, 24)
-
 func IsEquals(a, b noder.Hasher) bool {
-	if bytes.Equal(a.Hash(), empty) || bytes.Equal(b.Hash(), empty) {
+	if a.Hash() == zeroHash || b.Hash() == zeroHash {
 		return false
 	}
 
-	return bytes.Equal(a.Hash(), b.Hash())
+	return a.Hash() == b.Hash()
 }

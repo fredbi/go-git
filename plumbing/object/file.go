@@ -44,6 +44,8 @@ func (f *File) Contents() (content string, err error) {
 }
 
 // IsBinary returns if the file is binary or not
+//
+// NOTE(fredbi): this is the topmost CPU consumer...
 func (f *File) IsBinary() (bin bool, err error) {
 	reader, err := f.Reader()
 	if err != nil {

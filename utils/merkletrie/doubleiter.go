@@ -99,9 +99,11 @@ func (d *doubleIter) stepBoth() (err error) {
 	if d.from.current, err = d.from.iter.Step(); turnEOFIntoNil(err) != nil {
 		return err
 	}
+
 	if d.to.current, err = d.to.iter.Step(); turnEOFIntoNil(err) != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -137,7 +139,10 @@ const (
 // Compare returns the comparison between the current elements in the
 // merkletries.
 func (d *doubleIter) compare() (s comparison, err error) {
-	s.sameHash = d.hashEqual(d.from.current, d.to.current)
+	//s.sameHash = d.hashEqual(d.from.current, d.to.current)
+	// experimental(fred): makes a real difference on allocs because we don't have an interface that somehow requires to be allocated (strange but real)
+	// TODO: keep the interface but wrap in a function?
+	s.sameHash = d.from.current.Hash() == d.to.current.Hash()
 
 	fromIsDir := d.from.current.IsDir()
 	toIsDir := d.to.current.IsDir()

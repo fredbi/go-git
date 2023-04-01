@@ -8,6 +8,8 @@ import (
 	"github.com/go-git/go-git/v5/utils/merkletrie/noder"
 )
 
+var zeroHash = [24]byte{}
+
 // The node represents a index.Entry or a directory inferred from the path
 // of all entries. It implements the interface noder.Noder of merkletrie
 // package.
@@ -20,6 +22,7 @@ type node struct {
 	children []noder.Noder
 	isDir    bool
 	skip     bool
+	hash     [24]byte
 }
 
 // NewRootNode returns the root node of a computed tree from a index.Index,
@@ -46,6 +49,8 @@ func NewRootNode(idx *index.Index) noder.Noder {
 			} else {
 				n.isDir = true
 			}
+			copy(n.hash[:], e.Hash[:])
+			copy(n.hash[20:], e.Mode.Bytes())
 
 			m[n.path] = n
 			m[parent].children = append(m[parent].children, n)
@@ -70,12 +75,12 @@ func (n *node) Skip() bool {
 //
 // If the node is computed and not based on a index.Entry the hash is equals
 // to a 24-bytes slices of zero values.
-func (n *node) Hash() []byte {
+func (n *node) Hash() [24]byte {
 	if n.entry == nil {
-		return make([]byte, 24)
+		return zeroHash
 	}
 
-	return append(n.entry.Hash[:], n.entry.Mode.Bytes()...)
+	return n.hash
 }
 
 func (n *node) Name() string {

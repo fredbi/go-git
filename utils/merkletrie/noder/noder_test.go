@@ -14,13 +14,13 @@ var _ = Suite(&NoderSuite{})
 
 type noderMock struct {
 	name     string
-	hash     []byte
+	hash     [24]byte
 	isDir    bool
 	children []Noder
 }
 
 func (n noderMock) String() string             { return n.Name() }
-func (n noderMock) Hash() []byte               { return n.hash }
+func (n noderMock) Hash() [24]byte             { return n.hash }
 func (n noderMock) Name() string               { return n.name }
 func (n noderMock) IsDir() bool                { return n.isDir }
 func (n noderMock) Children() ([]Noder, error) { return n.children, nil }
@@ -42,7 +42,7 @@ func (n noderMock) Skip() bool                 { return false }
 func nodersFixture() []Noder {
 	n1 := &noderMock{
 		name:     "1",
-		hash:     []byte{0x00, 0x01, 0x02},
+		hash:     [24]byte{0x00, 0x01, 0x02},
 		isDir:    true,
 		children: childrenFixture(),
 	}
@@ -74,7 +74,7 @@ func (s *NoderSuite) TestLast(c *C) {
 func (s *NoderSuite) TestPathImplementsNoder(c *C) {
 	p := pathFixture()
 	c.Assert(p.Name(), Equals, "1")
-	c.Assert(p.Hash(), DeepEquals, []byte{0x00, 0x01, 0x02})
+	c.Assert(p.Hash(), DeepEquals, [24]byte{0x00, 0x01, 0x02})
 	c.Assert(p.IsDir(), Equals, true)
 
 	children, err := p.Children()

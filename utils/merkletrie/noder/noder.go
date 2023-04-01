@@ -14,7 +14,7 @@ import "fmt"
 // Hasher interface is implemented by types that can tell you
 // their hash.
 type Hasher interface {
-	Hash() []byte
+	Hash() [24]byte
 }
 
 // Equal functions take two hashers and return if they are equal.
@@ -53,7 +53,7 @@ type Noder interface {
 	// implement NumChildren in O(1) while Children is usually more
 	// complex.
 	NumChildren() (int, error)
-	Skip()	bool
+	Skip() bool
 }
 
 // NoChildren represents the children of a noder without children.

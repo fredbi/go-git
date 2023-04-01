@@ -42,7 +42,7 @@ func newChangeEntry(p noder.Path) (ChangeEntry, error) {
 		TreeEntry: TreeEntry{
 			Name: asTreeNoder.name,
 			Mode: asTreeNoder.mode,
-			Hash: asTreeNoder.hash,
+			Hash: asTreeNoder.nhash,
 		},
 	}, nil
 }

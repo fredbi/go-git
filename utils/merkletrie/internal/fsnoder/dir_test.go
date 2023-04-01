@@ -69,7 +69,7 @@ func (s *DirSuite) TestNewDirectoryNoNameAndEmpty(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0xca, 0x40, 0xf8, 0x67, 0x57, 0x8c, 0x32, 0x1c})
+		[24]byte{0xca, 0x40, 0xf8, 0x67, 0x57, 0x8c, 0x32, 0x1c})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, noder.NoChildren)
 	c.Assert(root.String(), Equals, "()")
@@ -80,7 +80,7 @@ func (s *DirSuite) TestNewDirectoryEmpty(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0xca, 0x40, 0xf8, 0x67, 0x57, 0x8c, 0x32, 0x1c})
+		[24]byte{0xca, 0x40, 0xf8, 0x67, 0x57, 0x8c, 0x32, 0x1c})
 	c.Assert(root.Name(), Equals, "root")
 	assertChildren(c, root, noder.NoChildren)
 	c.Assert(root.String(), Equals, "root()")
@@ -103,8 +103,9 @@ func (s *DirSuite) TestNewDirWithEmptyDir(c *C) {
 	root, err := newDir("", []noder.Noder{empty})
 	c.Assert(err, IsNil)
 
+	// obtained []uint8 = []byte{0xc5, 0x31, 0xe, 0x1f, 0xc4, 0xb5, 0xff, 0xb5}
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0x39, 0x25, 0xa8, 0x99, 0x16, 0x47, 0x6a, 0x75})
+		[24]uint8{0xc5, 0x31, 0xe, 0x1f, 0xc4, 0xb5, 0xff, 0xb5})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, []noder.Noder{empty})
 	c.Assert(root.String(), Equals, "(empty())")
@@ -117,7 +118,7 @@ func (s *DirSuite) TestNewDirWithOneEmptyFile(c *C) {
 	root, err := newDir("", []noder.Noder{empty})
 	c.Assert(err, IsNil)
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0xd, 0x4e, 0x23, 0x1d, 0xf5, 0x2e, 0xfa, 0xc2})
+		[24]uint8{0x1e, 0x8b, 0x24, 0x9e, 0xa0, 0x59, 0xdb, 0x42})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, []noder.Noder{empty})
 	c.Assert(root.String(), Equals, "(name<>)")
@@ -130,7 +131,7 @@ func (s *DirSuite) TestNewDirWithOneFile(c *C) {
 	root, err := newDir("", []noder.Noder{a})
 	c.Assert(err, IsNil)
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0x96, 0xab, 0x29, 0x54, 0x2, 0x9e, 0x89, 0x28})
+		[24]uint8{0x40, 0x36, 0xc9, 0x2, 0xbf, 0x64, 0x93, 0x28})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, []noder.Noder{a})
 	c.Assert(root.String(), Equals, "(a<1>)")
@@ -216,7 +217,7 @@ func (s *DirSuite) TestNewDirWithTwoFilesSameContent(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0xc7, 0xc4, 0xbf, 0x70, 0x33, 0xb9, 0x57, 0xdb})
+		[24]uint8{0x12, 0xfc, 0xbd, 0x6, 0xc3, 0xb6, 0x30, 0x9b})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, []noder.Noder{b1, a1})
 	c.Assert(root.String(), Equals, "(a<1> b<1>)")
@@ -232,7 +233,7 @@ func (s *DirSuite) TestNewDirWithTwoFilesDifferentContent(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0x94, 0x8a, 0x9d, 0x8f, 0x6d, 0x98, 0x34, 0x55})
+		[24]uint8{0x93, 0x26, 0x9b, 0x56, 0x7d, 0xf9, 0x9b, 0x95})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, []noder.Noder{b2, a1})
 }
@@ -282,7 +283,7 @@ func (s *DirSuite) TestCrazy(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(root.Hash(), DeepEquals,
-		[]byte{0xc3, 0x72, 0x9d, 0xf1, 0xcc, 0xec, 0x6d, 0xbb})
+		[24]uint8{0x90, 0x2c, 0x2, 0xfd, 0x78, 0xd7, 0x6d, 0x48})
 	c.Assert(root.Name(), Equals, "")
 	assertChildren(c, root, []noder.Noder{E, c1, B, a1, d2})
 	c.Assert(root.String(), Equals,

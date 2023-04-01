@@ -1,7 +1,6 @@
 package git
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -239,7 +238,7 @@ func (w *Worktree) diffTreeWithStaging(t *object.Tree, reverse bool) (merkletrie
 	return merkletrie.DiffTree(from, to, diffTreeIsEquals)
 }
 
-var emptyNoderHash = make([]byte, 24)
+var emptyNoderHash = [24]byte{}
 
 // diffTreeIsEquals is a implementation of noder.Equals, used to compare
 // noder.Noder, it compare the content and the length of the hashes.
@@ -251,11 +250,11 @@ func diffTreeIsEquals(a, b noder.Hasher) bool {
 	hashA := a.Hash()
 	hashB := b.Hash()
 
-	if bytes.Equal(hashA, emptyNoderHash) || bytes.Equal(hashB, emptyNoderHash) {
+	if hashA == emptyNoderHash || hashB == emptyNoderHash {
 		return false
 	}
 
-	return bytes.Equal(hashA, hashB)
+	return hashA == hashB
 }
 
 // Add adds the file contents of a file in the worktree to the index. if the
