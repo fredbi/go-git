@@ -33,6 +33,14 @@ func NewHash(s string) Hash {
 	return h
 }
 
+// NewHashBytes return a new Hash from a hexadecimal hash representation
+func NewHashBytes(s []byte) Hash {
+	var h Hash
+	_, _ = hex.Decode(h[:], s)
+
+	return h
+}
+
 func (h Hash) IsZero() bool {
 	var empty Hash
 	return h == empty

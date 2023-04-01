@@ -1,11 +1,11 @@
 package object
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
@@ -21,6 +21,8 @@ const (
 	endpgp    string = "-----END PGP SIGNATURE-----"
 	headerpgp string = "gpgsig"
 )
+
+var spaceSep = []byte{' '}
 
 // Hash represents the hash of an object
 type Hash plumbing.Hash
@@ -182,62 +184,73 @@ func (c *Commit) Decode(o plumbing.EncodedObject) (err error) {
 
 	r := sync.GetBufioReader(reader)
 	defer sync.PutBufioReader(r)
+	scanner := bufio.NewScanner(r)
 
-	var message bool
-	var pgpsig bool
-	var msgbuf bytes.Buffer
-	for {
-		line, err := r.ReadBytes('\n')
-		if err != nil && err != io.EOF {
-			return err
-		}
+	var (
+		message      bool
+		hasMessage   bool
+		pgpsig       bool
+		msg          strings.Builder
+		pgpSignature strings.Builder
+	)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
 
 		if pgpsig {
 			if len(line) > 0 && line[0] == ' ' {
-				line = bytes.TrimLeft(line, " ")
-				c.PGPSignature += string(line)
+				pgpSignature.Write(bytes.TrimLeftFunc(line, func(r rune) bool { return r == ' ' }))
+
 				continue
-			} else {
-				pgpsig = false
 			}
+
+			pgpsig = false
 		}
 
 		if !message {
 			line = bytes.TrimSpace(line)
 			if len(line) == 0 {
 				message = true
+
 				continue
 			}
 
-			split := bytes.SplitN(line, []byte{' '}, 2)
+			header, after, _ := bytes.Cut(line, spaceSep)
+			data, _, _ := bytes.Cut(after, spaceSep)
 
-			var data []byte
-			if len(split) == 2 {
-				data = split[1]
-			}
-
-			switch string(split[0]) {
-			case "tree":
-				c.TreeHash = plumbing.NewHash(string(data))
-			case "parent":
-				c.ParentHashes = append(c.ParentHashes, plumbing.NewHash(string(data)))
-			case "author":
+			switch {
+			case bytes.Equal(header, []byte("tree")):
+				c.TreeHash = plumbing.NewHashBytes(data)
+			case bytes.Equal(header, []byte("parent")):
+				c.ParentHashes = append(c.ParentHashes, plumbing.NewHashBytes(data))
+			case bytes.Equal(header, []byte("author")):
 				c.Author.Decode(data)
-			case "committer":
+			case bytes.Equal(header, []byte("committer")):
 				c.Committer.Decode(data)
-			case headerpgp:
-				c.PGPSignature += string(data) + "\n"
+			case bytes.Equal(header, []byte(headerpgp)):
+				if !pgpsig {
+					pgpSignature.Grow(len(data) + 1)
+				}
+				pgpSignature.Write(data)
+				pgpSignature.WriteRune('\n')
 				pgpsig = true
 			}
-		} else {
-			msgbuf.Write(line)
-		}
 
-		if err == io.EOF {
-			break
+			continue
 		}
+		if !hasMessage {
+			msg.Grow(len(line))
+		}
+		msg.Write(line)
+		hasMessage = true
 	}
-	c.Message = msgbuf.String()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	c.PGPSignature = pgpSignature.String()
+	c.Message = msg.String()
+
 	return nil
 }
 
