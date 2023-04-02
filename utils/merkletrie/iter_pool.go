@@ -3,17 +3,16 @@ package merkletrie
 import (
 	"sync"
 
-	"github.com/go-git/go-git/v5/utils/merkletrie/noder"
+	"github.com/go-git/go-git/v5/utils/merkletrie/internal/frame"
 )
 
-var noderPaths = sync.Pool{
+var framesPool = sync.Pool{
 	New: func() interface{} {
-		noders := make(noder.Path, 0, 10)
-
-		return noders
+		return &frame.Frame{}
 	},
 }
 
+/*
 func getNoderPath(size int) noder.Path {
 	p := noderPaths.Get().(noder.Path)
 
@@ -29,3 +28,4 @@ func getNoderPath(size int) noder.Path {
 func putNoderPath(p noder.Path) {
 	noderPaths.Put(p)
 }
+*/

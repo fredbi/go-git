@@ -89,7 +89,7 @@ func newIter(root noder.Noder, base noder.Path) (*Iter, error) {
 		return ret, nil
 	}
 
-	frame, err := frame.New(root)
+	frame, err := frame.New(root) // TODO(fred): find a way to avoid extra allocs here (120k)
 	if err != nil {
 		return nil, err
 	}

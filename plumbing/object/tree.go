@@ -140,8 +140,18 @@ func (t *Tree) TreeEntryFile(e *TreeEntry) (*File, error) {
 }
 
 // FindEntry search a TreeEntry in this tree or any subtree.
-func (t *Tree) FindEntry(pth string) (*TreeEntry, error) {
-	pathParts := bytes.FieldsFunc(hackZeroAlloc(pth), func(r rune) bool { return r == '/' })
+func (t *Tree) FindEntry(path string) (*TreeEntry, error) {
+	pathBytes := hackZeroAlloc(path)
+	if t.t != nil {
+		// heuristic: attempt to short-circuit an exact match.
+		// This avoids calling FieldsFunc systematically, once the Tree path cache is warm.
+		// In practice, the heuristic works well when used in the context of DiffTree.
+		if entry, err := t.entry(pathBytes); err == nil {
+			return entry, nil
+		}
+	}
+
+	pathParts := bytes.FieldsFunc(pathBytes, func(r rune) bool { return r == '/' })
 	if t.t == nil {
 		t.t = make(map[string]*Tree, len(pathParts))
 	}
@@ -152,7 +162,7 @@ func (t *Tree) FindEntry(pth string) (*TreeEntry, error) {
 	for i := len(pathParts) - 1; i > 1; i-- {
 		subpath := bytes.Join(pathParts[:i], []byte{filepath.Separator})
 
-		tree, ok := t.t[string(subpath)]
+		tree, ok := t.t[string(subpath)] // there is no alloc with this conversion
 		if ok {
 			startingTree = tree
 			pathParts = pathParts[i:]
@@ -226,6 +236,7 @@ func (t *Tree) Type() plumbing.ObjectType {
 
 // Decode transform an plumbing.EncodedObject into a Tree struct
 func (t *Tree) Decode(o plumbing.EncodedObject) (err error) {
+	// onceInitStringCache()
 	if o.Type() != plumbing.TreeObject {
 		return ErrUnsupportedObject
 	}
@@ -275,7 +286,8 @@ func (t *Tree) Decode(o plumbing.EncodedObject) (err error) {
 			return err
 		}
 
-		baseName := string(part)
+		// baseName := cachedStrings.Get(part)
+		baseName := string(part) // TODO(fred): now the main source of allocations - most of this allocation work is squandered in temporary Tree objects
 		buf.Reset()
 
 		// 3. decode hash part. Expect exactly 20 bytes.

@@ -24,6 +24,7 @@ func (p Path) Skip() bool {
 
 // String returns the full path of the final noder as a string, using
 // "/" as the separator.
+// TODO(fred): allocates quite a bit.
 func (p Path) String() string {
 	var buf strings.Builder
 	sep := ""
