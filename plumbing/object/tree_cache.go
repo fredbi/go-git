@@ -9,26 +9,21 @@ import (
 	"github.com/go-git/go-git/v5/utils/merkletrie/noder"
 )
 
-// FRED DEBUG
 var (
-	cachedTrees   *treeCache
-	onceTreeCache sync.Once
-
-	cachedTreeNoders   *treeNoderCache
-	onceTreeNoderCache sync.Once
-
 	treeWalkers = sync.Pool{
 		New: func() interface{} {
 			return new(TreeWalker)
 		},
 	}
-	cachedMerkles   *merkleCache
-	onceMerkleCache sync.Once
-	cachedStrings   *stringCache
-	onceStringCache sync.Once
 )
 
 type (
+	caches struct {
+		trees      *treeCache
+		treeNoders *treeNoderCache
+		changes    *merkleCache
+	}
+
 	treeNoderCache struct {
 		noders map[treeNoderKey]*treeNoder
 	}
@@ -44,39 +39,20 @@ type (
 		plumbing.Hash
 		filemode.FileMode
 	}
-	stringCache struct { // memoized strings
-		strings map[string]string
-	}
 )
 
-func onceInitTreeCache() {
-	onceTreeCache.Do(func() {
-		cachedTrees = &treeCache{
+func defaultCaches() *caches {
+	return &caches{
+		trees: &treeCache{
 			trees: make(map[plumbing.Hash]*Tree, 1000),
-		}
-	})
-}
-
-func onceInitTreeNoderCache() {
-	onceTreeNoderCache.Do(func() {
-		cachedTreeNoders = &treeNoderCache{
+		},
+		treeNoders: &treeNoderCache{
 			noders: make(map[treeNoderKey]*treeNoder, 1000),
-		}
-	})
-}
-
-func onceInitMerkleCache() {
-	onceMerkleCache.Do(func() {
-		cachedMerkles = &merkleCache{
+		},
+		changes: &merkleCache{
 			changes: make(map[[48]byte]merkletrie.Changes, 1000),
-		}
-	})
-}
-
-func onceInitStringCache() {
-	onceStringCache.Do(func() {
-		cachedStrings = &stringCache{strings: make(map[string]string, 1000)}
-	})
+		},
+	}
 }
 
 func (c *treeCache) Get(h plumbing.Hash) *Tree {
@@ -133,17 +109,6 @@ func merkleKey(from, to noder.Noder) [48]byte {
 	return res
 }
 
-func (c *stringCache) Get(key []byte) string {
-	if val, ok := c.strings[string(key)]; ok {
-		return val
-	}
-
-	s := string(key)
-	c.strings[s] = s
-
-	return s
-}
-
 func getTreeWalker(t *Tree, recursive bool, seen map[plumbing.Hash]bool) *TreeWalker {
 	w := treeWalkers.Get().(*TreeWalker)
 
@@ -158,6 +123,7 @@ func getTreeWalker(t *Tree, recursive bool, seen map[plumbing.Hash]bool) *TreeWa
 	w.seen = seen
 	w.s = t.s
 	w.t = t
+	w.treeOptions = t.treeOptions
 
 	return w
 }

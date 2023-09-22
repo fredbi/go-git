@@ -27,25 +27,28 @@ type treeNoder struct {
 }
 
 // NewTreeRootNode returns the root node of a Tree
-func NewTreeRootNode(t *Tree) noder.Noder {
-	if t == nil {
+func NewTreeRootNode(tree *Tree) noder.Noder {
+	if tree == nil {
 		return &treeNoder{}
 	}
-	onceInitTreeNoderCache()
 
-	if n := cachedTreeNoders.Get(t.Hash, filemode.Dir); n != nil {
-		return n
+	if tree.treeOptions != nil && tree.caches != nil && tree.caches.treeNoders != nil {
+		if n := tree.caches.treeNoders.Get(tree.Hash, filemode.Dir); n != nil {
+			return n
+		}
 	}
 
 	n := &treeNoder{
-		parent: t,
+		parent: tree,
 		name:   "",
 		mode:   filemode.Dir,
-		nhash:  t.Hash,
-		hash:   makeNoderHash(t.Hash, filemode.Dir),
+		nhash:  tree.Hash,
+		hash:   makeNoderHash(tree.Hash, filemode.Dir),
 	}
 
-	cachedTreeNoders.Put(t.Hash, filemode.Dir, n)
+	if tree.treeOptions != nil && tree.caches != nil && tree.caches.treeNoders != nil {
+		tree.caches.treeNoders.Put(tree.Hash, filemode.Dir, n)
+	}
 
 	return n
 }
@@ -120,14 +123,12 @@ func (t *treeNoder) Children() ([]noder.Noder, error) {
 func (t *treeNoder) transformChildren(tree *Tree) ([]noder.Noder, error) {
 	var err error
 	var e TreeEntry
-	onceInitTreeNoderCache()
 
 	// there will be more tree entries than children in the tree,
 	// due to submodules and empty directories, but I think it is still
 	// worth it to pre-allocate the whole array now, even if sometimes
 	// is bigger than needed.
-	// ret := make([]noder.Noder, 0, len(tree.Entries)) // CHALLENGE TODO(fred)
-	var ret []noder.Noder // it is actually better to leave the go runtime allocate as needed
+	var ret []noder.Noder // it is actually better to leave the go runtime allocate as needed rather than to preallocate.
 
 	if t.walker == nil {
 		t.walker = newTreeWalker(tree, false, nil, false) // don't recurse
@@ -141,13 +142,13 @@ func (t *treeNoder) transformChildren(tree *Tree) ([]noder.Noder, error) {
 			break
 		}
 		if err != nil {
-			// walker.Close()
-			// putTreeWalker(walker)
-
 			return nil, err
 		}
 
-		n := cachedTreeNoders.Get(e.Hash, e.Mode)
+		var n *treeNoder
+		if tree.caches != nil && tree.caches.treeNoders != nil {
+			n = tree.caches.treeNoders.Get(e.Hash, e.Mode)
+		}
 		if n == nil {
 			n = &treeNoder{
 				parent: tree,
@@ -156,12 +157,13 @@ func (t *treeNoder) transformChildren(tree *Tree) ([]noder.Noder, error) {
 				nhash:  e.Hash,
 				hash:   makeNoderHash(e.Hash, e.Mode),
 			}
-			cachedTreeNoders.Put(e.Hash, e.Mode, n)
+			if tree.caches != nil && tree.caches.treeNoders != nil {
+				tree.caches.treeNoders.Put(e.Hash, e.Mode, n)
+			}
 		}
 
 		ret = append(ret, n)
 	}
-	// putTreeWalker(walker)
 
 	return ret, nil
 }

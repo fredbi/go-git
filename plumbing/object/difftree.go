@@ -23,6 +23,9 @@ func DiffTreeContext(ctx context.Context, a, b *Tree) (Changes, error) {
 }
 
 // DiffTreeOptions are the configurable options when performing a diff tree.
+//
+// This structure holds tree caching structures: callers may reuse cached trees by
+// passing the same options to a new Diff operation.
 type DiffTreeOptions struct {
 	// DetectRenames is whether the diff tree will use rename detection.
 	DetectRenames bool
@@ -41,7 +44,8 @@ type DiffTreeOptions struct {
 	// OnlyExactRenames performs only detection of exact renames and will not perform
 	// any detection of renames based on file similarity.
 	OnlyExactRenames bool
-	// TODO: UseCache
+
+	*treeOptions
 }
 
 // DefaultDiffTreeOptions are the default and recommended options for the
@@ -56,9 +60,12 @@ var DefaultDiffTreeOptions = &DiffTreeOptions{
 // DiffTreeWithOptions compares the content and mode of the blobs found
 // via two tree objects with the given options. The provided context
 // must be non-nil.
+//
 // If no options are passed, no rename detection will be performed. The
 // recommended options are DefaultDiffTreeOptions.
+//
 // An error will be returned if the context expires.
+//
 // This function will be deprecated and removed in v6 so the default
 // behaviour of DiffTree is to detect renames.
 func DiffTreeWithOptions(
@@ -66,16 +73,29 @@ func DiffTreeWithOptions(
 	a, b *Tree,
 	opts *DiffTreeOptions,
 ) (Changes, error) {
-	from := NewTreeRootNode(a)
-	to := NewTreeRootNode(b)
-
 	hashEqual := func(a, b noder.Hasher) bool {
 		return a.Hash() == b.Hash()
 	}
 
-	onceInitMerkleCache() // TODO: maintaining a Merkel cache is an option
+	if opts == nil {
+		// NOTE: no rename detection by default
+		opts = new(DiffTreeOptions)
+	}
+	if opts.treeOptions == nil {
+		opts.treeOptions = applyTreeOptions(nil)
+	}
 
-	merkletrieChanges := cachedMerkles.Get(from, to)
+	if a != nil {
+		a.treeOptions = opts.treeOptions
+	}
+	from := NewTreeRootNode(a)
+
+	if b != nil {
+		b.treeOptions = opts.treeOptions
+	}
+	to := NewTreeRootNode(b)
+
+	merkletrieChanges := opts.caches.changes.Get(from, to)
 	if merkletrieChanges == nil {
 		var err error
 
@@ -86,16 +106,12 @@ func DiffTreeWithOptions(
 			}
 			return nil, err
 		}
-		cachedMerkles.Put(from, to, merkletrieChanges)
+		opts.caches.changes.Put(from, to, merkletrieChanges)
 	}
 
 	changes, err := newChanges(merkletrieChanges)
 	if err != nil {
 		return nil, err
-	}
-
-	if opts == nil {
-		opts = new(DiffTreeOptions)
 	}
 
 	if opts.DetectRenames {

@@ -75,7 +75,7 @@ func DecodeCommit(s storer.EncodedObjectStorer, o plumbing.EncodedObject) (*Comm
 
 // Tree returns the Tree from the commit.
 func (c *Commit) Tree() (*Tree, error) {
-	return GetTree(c.s, c.TreeHash)
+	return GetTree(c.s, c.TreeHash) // TODO(fred)
 }
 
 // PatchContext returns the Patch between the actual commit and the provided one.
@@ -84,7 +84,7 @@ func (c *Commit) Tree() (*Tree, error) {
 // NOTE: Since version 5.1.0 the renames are correctly handled, the settings
 // used are the recommended options DefaultDiffTreeOptions.
 func (c *Commit) PatchContext(ctx context.Context, to *Commit) (*Patch, error) {
-	fromTree, err := c.Tree()
+	fromTree, err := c.Tree() // TODO(fred)
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +198,7 @@ func (c *Commit) Decode(o plumbing.EncodedObject) (err error) {
 		line := scanner.Bytes()
 
 		if pgpsig {
+			// PGP signature section
 			if len(line) > 0 && line[0] == ' ' {
 				pgpSignature.Write(bytes.TrimLeftFunc(line, func(r rune) bool { return r == ' ' }))
 
@@ -208,6 +209,7 @@ func (c *Commit) Decode(o plumbing.EncodedObject) (err error) {
 		}
 
 		if !message {
+			// header section
 			line = bytes.TrimSpace(line)
 			if len(line) == 0 {
 				message = true
@@ -215,8 +217,7 @@ func (c *Commit) Decode(o plumbing.EncodedObject) (err error) {
 				continue
 			}
 
-			header, after, _ := bytes.Cut(line, spaceSep)
-			data, _, _ := bytes.Cut(after, spaceSep)
+			header, data, _ := bytes.Cut(line, spaceSep)
 
 			switch {
 			case bytes.Equal(header, []byte("tree")):
@@ -238,9 +239,12 @@ func (c *Commit) Decode(o plumbing.EncodedObject) (err error) {
 
 			continue
 		}
-		if !hasMessage {
+
+		// commit message section
+		if !hasMessage { // first message line: pre-allocate buffer space for this line.
 			msg.Grow(len(line))
 		}
+
 		msg.Write(line)
 		hasMessage = true
 	}
@@ -249,6 +253,9 @@ func (c *Commit) Decode(o plumbing.EncodedObject) (err error) {
 	}
 
 	c.PGPSignature = pgpSignature.String()
+	if msg.Len() > 0 {
+		msg.WriteRune('\n')
+	}
 	c.Message = msg.String()
 
 	return nil

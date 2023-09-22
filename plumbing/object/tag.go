@@ -79,6 +79,7 @@ func (t *Tag) Type() plumbing.ObjectType {
 
 // Decode transforms a plumbing.EncodedObject into a Tag struct.
 func (t *Tag) Decode(o plumbing.EncodedObject) (err error) {
+	// TODO(fred): same method as used for Tree may be applied here to save on allocations
 	if o.Type() != plumbing.TagObject {
 		return ErrUnsupportedObject
 	}

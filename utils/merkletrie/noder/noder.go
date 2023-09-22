@@ -11,6 +11,9 @@ package noder
 
 import "fmt"
 
+// Hash is a plumbing.Hash plus 4 bytes encoding the file mode.
+type Hash [24]byte
+
 // Hasher interface is implemented by types that can tell you
 // their hash.
 type Hasher interface {

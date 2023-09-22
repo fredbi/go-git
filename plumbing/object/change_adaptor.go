@@ -49,6 +49,7 @@ func newChangeEntry(p noder.Path) (ChangeEntry, error) {
 
 func newChanges(src merkletrie.Changes) (Changes, error) {
 	ret := make(Changes, len(src))
+
 	var err error
 	for i, e := range src {
 		ret[i], err = newChange(e)

@@ -40,14 +40,18 @@ type Tree struct {
 	s storer.EncodedObjectStorer
 	m map[string]*TreeEntry
 	t map[string]*Tree // tree path cache
+
+	*treeOptions
 }
 
 // GetTree gets a tree from an object storer and decodes it.
-func GetTree(s storer.EncodedObjectStorer, h plumbing.Hash) (*Tree, error) {
-	onceInitTreeCache() // TODO(fred): make tree cache an option
+func GetTree(s storer.EncodedObjectStorer, h plumbing.Hash, opts ...TreeOption) (*Tree, error) {
+	options := applyTreeOptions(opts)
 
-	if t := cachedTrees.Get(h); t != nil {
-		return t, nil
+	if options.caches.trees != nil {
+		if t := options.caches.trees.Get(h); t != nil {
+			return t, nil
+		}
 	}
 
 	o, err := s.EncodedObject(plumbing.TreeObject, h)
@@ -59,8 +63,11 @@ func GetTree(s storer.EncodedObjectStorer, h plumbing.Hash) (*Tree, error) {
 	if err != nil {
 		return nil, err
 	}
+	t.treeOptions = options
 
-	cachedTrees.Put(h, t)
+	if options.caches.trees != nil {
+		options.caches.trees.Put(h, t)
+	}
 
 	return t, nil
 }
@@ -121,7 +128,7 @@ func (t *Tree) Tree(path string) (*Tree, error) {
 		return nil, ErrDirectoryNotFound
 	}
 
-	tree, err := GetTree(t.s, e.Hash)
+	tree, err := GetTree(t.s, e.Hash) // ICI
 	if err == plumbing.ErrObjectNotFound {
 		return nil, ErrDirectoryNotFound
 	}
@@ -397,6 +404,7 @@ type TreeWalker struct {
 
 	s storer.EncodedObjectStorer
 	t *Tree
+	*treeOptions
 }
 
 // NewTreeWalker returns a new TreeWalker for the given tree.
@@ -416,12 +424,12 @@ func newTreeWalker(t *Tree, recursive bool, seen map[plumbing.Hash]bool, fromPoo
 	stack = append(stack, &treeEntryIter{t, 0})
 
 	return &TreeWalker{
-		stack:     stack,
-		recursive: recursive,
-		seen:      seen,
-
-		s: t.s,
-		t: t,
+		stack:       stack,
+		recursive:   recursive,
+		seen:        seen,
+		s:           t.s,
+		t:           t,
+		treeOptions: t.treeOptions,
 	}
 }
 
@@ -466,7 +474,7 @@ func (w *TreeWalker) Next() (name string, entry TreeEntry, err error) {
 		}
 
 		if entry.Mode == filemode.Dir {
-			obj, err = GetTree(w.s, entry.Hash)
+			obj, err = GetTree(w.s, entry.Hash) // ICI
 		}
 
 		name = simpleJoin(w.base, entry.Name)
@@ -518,6 +526,8 @@ func (w *TreeWalker) reset() {
 type TreeIter struct {
 	storer.EncodedObjectIter
 	s storer.EncodedObjectStorer
+
+	*treeOptions
 }
 
 // NewTreeIter takes a storer.EncodedObjectStorer and a
@@ -525,8 +535,12 @@ type TreeIter struct {
 // tree contained in the storer.EncodedObjectIter.
 //
 // Any non-tree object returned by the storer.EncodedObjectIter is skipped.
-func NewTreeIter(s storer.EncodedObjectStorer, iter storer.EncodedObjectIter) *TreeIter {
-	return &TreeIter{iter, s}
+func NewTreeIter(s storer.EncodedObjectStorer, iter storer.EncodedObjectIter, opts ...TreeOption) *TreeIter {
+	return &TreeIter{
+		EncodedObjectIter: iter,
+		s:                 s,
+		treeOptions:       applyTreeOptions(opts),
+	}
 }
 
 // Next moves the iterator to the next tree and returns a pointer to it. If
@@ -542,7 +556,13 @@ func (iter *TreeIter) Next() (*Tree, error) {
 			continue
 		}
 
-		return DecodeTree(iter.s, obj)
+		tree, err := DecodeTree(iter.s, obj)
+		if err != nil {
+			return nil, err
+		}
+		tree.treeOptions = iter.treeOptions
+
+		return tree, nil
 	}
 }
 
@@ -555,12 +575,13 @@ func (iter *TreeIter) ForEach(cb func(*Tree) error) error {
 			return nil
 		}
 
-		t, err := DecodeTree(iter.s, obj)
+		tree, err := DecodeTree(iter.s, obj)
 		if err != nil {
 			return err
 		}
+		tree.treeOptions = iter.treeOptions
 
-		return cb(t)
+		return cb(tree)
 	})
 }
 
